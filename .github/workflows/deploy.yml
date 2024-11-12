@@ -48,7 +48,8 @@ jobs:
           IMAGE_TAG="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/my-ecr-repo:latest"
           echo "Building Docker image and pushing to $IMAGE_TAG"
           
-          docker build -t $IMAGE_TAG .
+          # Build Docker image from the 'myapp' subdirectory
+          docker build -t $IMAGE_TAG ./myapp
           docker push $IMAGE_TAG
 
   terraform:
