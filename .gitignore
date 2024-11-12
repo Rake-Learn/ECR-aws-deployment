@@ -1,0 +1,12 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# AWS credentials
+credentials/
