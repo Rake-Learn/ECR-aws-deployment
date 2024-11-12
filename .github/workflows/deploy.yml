@@ -90,12 +90,12 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # Install TFLint
-      - name: 'Install TFLint'
-        run: |
-          curl -sLo tflint.zip https://github.com/terraform-linters/tflint/releases/download/v${{ env.TFLINT_VERSION }}/tflint_linux_amd64.zip
-          unzip tflint.zip -d /usr/local/bin/
-          tflint --version
+      # # Install TFLint
+      # - name: 'Install TFLint'
+      #   run: |
+      #     curl -sLo tflint.zip https://github.com/terraform-linters/tflint/releases/download/v${{ env.TFLINT_VERSION }}/tflint_linux_amd64.zip
+      #     unzip tflint.zip -d /usr/local/bin/
+      #     tflint --version
 
       # Install tfsec
       - name: 'Install tfsec'
