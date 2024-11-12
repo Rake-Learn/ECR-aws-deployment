@@ -31,7 +31,7 @@ jobs:
         id: account_id
         run: |
           echo "AWS Account ID: $(aws sts get-caller-identity --query Account --output text)"
-          echo "AWS Account ID=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_ENV
+          echo "AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_ENV
 
       # Build Docker image and push to Amazon ECR
       - name: Set up Docker Buildx
@@ -42,7 +42,12 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          IMAGE_TAG=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-ecr-repo:latest
+          # Retrieve AWS region from the environment variable
+          REGION=${{ secrets.AWS_REGION }}
+          ACCOUNT_ID=${{ env.AWS_ACCOUNT_ID }}
+          IMAGE_TAG="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/my-ecr-repo:latest"
+          echo "Building Docker image and pushing to $IMAGE_TAG"
+          
           docker build -t $IMAGE_TAG .
           docker push $IMAGE_TAG
 
