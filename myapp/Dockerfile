@@ -10,5 +10,5 @@ COPY app_code/ /app
 # Install dependencies
 RUN pip install -r requirements.txt
 
-# Specify the command to run the app
+## Specify the command to run the app
 CMD ["python", "app.py"]
