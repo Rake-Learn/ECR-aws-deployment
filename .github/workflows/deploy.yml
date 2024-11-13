@@ -1,4 +1,4 @@
-name: Terraform CI/CD
+name: Terraform CI/CD with Build and Deploy to AWS ECS
 
 on:
   push:
@@ -9,93 +9,133 @@ on:
       - main
 
 jobs:
-  terraform:
-    name: 'Terraform Lint, Security Check, and Deploy'
+  build-docker-image:
+    name: 'Login to AWS, Build Docker Image, and Push to ECR'
     runs-on: ubuntu-latest
 
-    env:
-      AWS_REGION: 'us-east-1'
-      TF_VERSION: '1.4.0'
-      TFLINT_VERSION: '0.46.1'  # Updated to a more recent version
-      TFSEC_VERSION: '1.28.1'   # Updated to a more recent version
-
     steps:
-    - name: 'Checkout GitHub repository'
-      uses: actions/checkout@v2
-
-    - name: 'Configure AWS credentials'
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: 'Set up Terraform'
-      uses: hashicorp/setup-terraform@v1
-      with:
-        terraform_version: ${{ env.TF_VERSION }}
-
-    - name: 'Install TFLint'
-      run: |
-        curl -sLo tflint.zip https://github.com/terraform-linters/tflint/releases/download/v${{ env.TFLINT_VERSION }}/tflint_linux_amd64.zip
-        unzip tflint.zip -d /usr/local/bin/
-        tflint --version
-
-    - name: 'Install tfsec'
-      run: |
-        curl -sLo tfsec https://github.com/aquasecurity/tfsec/releases/download/v${{ env.TFSEC_VERSION }}/tfsec-linux-amd64
-        chmod +x tfsec
-        mv tfsec /usr/local/bin/
-        tfsec --version
-
-    - name: 'Terraform Init'
-      run: terraform init
-
-    - name: 'Terraform Format'
-      run: terraform fmt
-
-    - name: 'Terraform Validate'
-      run: terraform validate
-
-    - name: 'TFLint'
-      run: |
-        tflint --init
-        tflint
-
-    - name: 'tfsec'
-      run: tfsec .
-
-    - name: 'Terraform Plan'
-      run: terraform plan -out=tfplan
-
-    - name: 'Terraform Apply'
-      if: github.ref == 'refs/heads/main'
-      run: terraform apply -auto-approve tfplan
-
-  build-deploy:
-    name: Build and Push Docker Image to ECR
-    runs-on: ubuntu-latest
-    needs: terraform
-
-    steps:
+      # Checkout the repository code
       - name: Checkout code
         uses: actions/checkout@v2
 
+      # Set up AWS CLI to log in using AWS credentials
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}  # You can either hardcode or set this in secrets
+
+      # Fetch AWS Account ID dynamically using AWS CLI
+      - name: Get AWS Account ID
+        id: account_id
+        run: |
+          echo "AWS Account ID: $(aws sts get-caller-identity --query Account --output text)"
+          echo "AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_ENV
+
+      # Create the ECR repository if it doesn't exist
+      - name: Create ECR Repository
+        run: |
+          aws ecr describe-repositories --repository-names my-ecr-repo || \
+          aws ecr create-repository --repository-name my-ecr-repo
+
+      # Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
+      # Login to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build Docker image
+      # Build and push Docker image
+      - name: Build and push Docker image
         run: |
-          # Set ECR repository URL and image name
-          ECR_REPO=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-ecr-repo
+          # Retrieve AWS region from the environment variable
+          REGION=${{ secrets.AWS_REGION }}
+          ACCOUNT_ID=${{ env.AWS_ACCOUNT_ID }}
+          IMAGE_TAG="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/my-ecr-repo:latest"
+          echo "Building Docker image and pushing to $IMAGE_TAG"
           
-          # Build the Docker image from the Dockerfile in the 'myapp' directory
-          docker build -t $ECR_REPO:latest ./myapp
+          # Build Docker image from the 'myapp' subdirectory
+          docker build -t $IMAGE_TAG ./myapp
+          docker push $IMAGE_TAG
 
-      - name: Push Docker image to ECR
-        run: |
-          ECR_REPO=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-ecr-repo
-          docker push $ECR_REPO:latest
+  # terraform:
+  #   name: 'Terraform Lint, Security Check, and Deploy'
+  #   runs-on: ubuntu-latest
+  #   needs: build-docker-image  # Ensure this job runs after the Docker image is built and pushed
+
+  #   env:
+  #     AWS_REGION: ${{ secrets.AWS_REGION }}
+  #     TF_VERSION: '1.4.0'
+  #     TFLINT_VERSION: '0.46.1'  # Updated to a more recent version
+  #     TFSEC_VERSION: '1.28.1'   # Updated to a more recent version
+
+  #   steps:
+  #     # Checkout the repository code again
+  #     - name: 'Checkout GitHub repository'
+  #       uses: actions/checkout@v2
+
+  #     # Set up AWS credentials again in the terraform job
+  #     - name: 'Configure AWS credentials'
+  #       uses: aws-actions/configure-aws-credentials@v1
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: ${{ env.AWS_REGION }}
+
+  #     # Set up Terraform
+  #     - name: 'Set up Terraform'
+  #       uses: hashicorp/setup-terraform@v1
+  #       with:
+  #         terraform_version: ${{ env.TF_VERSION }}
+
+  #     # # Install TFLint
+  #     # - name: 'Install TFLint'
+  #     #   run: |
+  #     #     curl -sLo tflint.zip https://github.com/terraform-linters/tflint/releases/download/v${{ env.TFLINT_VERSION }}/tflint_linux_amd64.zip
+  #     #     unzip tflint.zip -d /usr/local/bin/
+  #     #     tflint --version
+
+  #     # Install tfsec
+  #     - name: 'Install tfsec'
+  #       run: |
+  #         curl -sLo tfsec https://github.com/aquasecurity/tfsec/releases/download/v${{ env.TFSEC_VERSION }}/tfsec-linux-amd64
+  #         chmod +x tfsec
+  #         mv tfsec /usr/local/bin/
+  #         tfsec --version
+
+  #     # Initialize Terraform
+  #     - name: 'Terraform Init'
+  #       run: terraform init
+
+  #     # Format Terraform files
+  #     - name: 'Terraform Format'
+  #       run: terraform fmt
+
+  #     # Validate Terraform files
+  #     - name: 'Terraform Validate'
+  #       run: terraform validate
+
+  #     # Run TFLint for Terraform linting
+  #     - name: 'TFLint'
+  #       run: |
+  #         tflint --init
+  #         tflint
+
+  #     # Run tfsec for Terraform security scanning
+  #     - name: 'tfsec'
+  #       run: tfsec .
+
+  #     # Run Terraform Plan
+  #     - name: 'Terraform Plan'
+  #       run: terraform plan -out=tfplan
+
+  #     # Apply Terraform Plan
+  #     - name: 'Terraform Apply'
+  #       if: github.ref == 'refs/heads/main'
+  #       run: terraform apply -auto-approve tfplan
+
+  #     # Clean up Terraform resources
+  #     - name: 'Clean up Terraform files'
+  #       run: terraform destroy -auto-approve
